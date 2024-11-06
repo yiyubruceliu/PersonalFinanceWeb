@@ -1,0 +1,78 @@
+<!-- templates/import.html -->
+{% extends "base.html" %}
+
+{% block title %}Import Transactions - Finance Tracker{% endblock %}
+
+{% block content %}
+
+<!-- Select2 CSS -->
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+
+<!-- jQuery (required by Select2) -->
+<script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+
+<!-- Select2 JavaScript -->
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+
+
+<div class="container mt-5">
+    <h1 class="mb-4">Import Transactions</h1>
+    <form action="{{ url_for('import_transactions') }}" method="POST" enctype="multipart/form-data">
+        <div class="form-group">
+            <label for="account_name">Account Name</label>
+            <input type="text" class="form-control" id="account_name" name="account_name" placeholder="Type account name..." autocomplete="off" required>
+            <div id="autocomplete-suggestions" class="list-group position-absolute"></div>
+        </div>
+        <div class="form-group">
+            <label for="currency_code">Select Currency</label>
+            <select class="form-control select2" id="currency_code" name="currency_code" required>
+                {% for currency in currencies %}
+                <option value="{{ currency.code }}">{{ currency.name }}</option>
+                {% endfor %}
+            </select>
+        </div>        
+        <div class="form-group">
+            <label for="file">Upload CSV File</label>
+            <input type="file" class="form-control-file" id="file" name="file" accept=".csv,.pdf" required>
+        </div>
+        <button type="submit" class="btn btn-primary">Import</button>
+        <a href="{{ url_for('index') }}" class="btn btn-secondary">Cancel</a>
+    </form>
+</div>
+
+<!-- JavaScript for Autocomplete -->
+<script>
+    document.getElementById('account_name').addEventListener('input', function() {
+        const query = this.value;
+        if (query.length >= 2) {
+            fetch(`/autocomplete_account?query=${query}`)
+                .then(response => response.json())
+                .then(data => {
+                    const suggestions = document.getElementById('autocomplete-suggestions');
+                    suggestions.innerHTML = '';
+                    data.forEach(account => {
+                        const item = document.createElement('a');
+                        item.classList.add('list-group-item', 'list-group-item-action');
+                        item.textContent = account.name;
+                        item.onclick = () => {
+                            document.getElementById('account_name').value = account.name;
+                            suggestions.innerHTML = ''; // Clear suggestions
+                        };
+                        suggestions.appendChild(item);
+                    });
+                });
+        }
+    });
+
+    
+    $(document).ready(function() {
+        // Initialize Select2 on the currency dropdown
+        $('#currency_code').select2({
+            placeholder: "Search for a currency",
+            allowClear: true
+        });
+    });
+
+</script>
+
+{% endblock %}

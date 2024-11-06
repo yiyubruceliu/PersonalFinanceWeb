@@ -1,0 +1,7 @@
+# Ignore .env file
+.env
+
+# Ignore uploads folder and its contents
+uploads/
+results/
+__pycache__/

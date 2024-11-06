@@ -1,0 +1,187 @@
+{% extends "base.html" %}
+
+{% block title %}Overview - Personal Finance Tracker{% endblock %}
+
+{% block content %}
+<style>
+    .form-select {
+        padding: 0.25rem 0.5rem; /* Adjust padding for better spacing */
+        font-size: 0.875rem;     /* Adjust font size for consistency */
+    }
+</style>
+
+<h1 class="text-center">Transactions</h1>
+<hr/>
+<div class="row">
+    <!-- Left Sidebar for Account Filters -->
+    <div class="col-md-3">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5>Filter by Account</h5>
+                <button class="btn btn-primary btn-sm" onclick="applyFilters()">Apply</button>
+            </div>
+            <div class="card-body">
+                <form id="accountFilterForm">
+                    {% for account in account_names %}
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" value="{{ account }}" id="account-{{ loop.index }}" name="accounts">
+                        <label class="form-check-label" for="account-{{ loop.index }}">
+                            {{ account }}
+                        </label>
+                    </div>
+                    {% endfor %}
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content Area for Transactions -->
+    <div class="col-md-9">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <!-- Total Records Label on the Left -->
+            <span class="font-weight-bold">Total Records: {{ total_count }}</span>
+            <!-- Import Transactions Button on the Right -->
+            <a href="{{ url_for('import_transactions') }}" class="btn btn-secondary">Import Transactions</a>
+        </div>
+        
+        <table class="table table-bordered">
+            <thead class="thead-dark">
+                <tr>
+                    <th>Date</th>
+                    <th>Description</th>
+                    <th>Amount</th>
+                    <th>Category</th>
+                    <th>Confidence</th>
+                </tr>
+            </thead>
+            <tbody id="transactionTable">
+                {% for transaction in transactions %}
+                <tr>
+                    <td ondblclick="makeEditable(this, '{{ transaction._id }}', 'date')">{{ transaction.date }}</td>
+                    <td ondblclick="makeEditable(this, '{{ transaction._id }}', 'description')">{{ transaction.description }}</td>
+                    <td ondblclick="makeEditable(this, '{{ transaction._id }}', 'amount')">{{ transaction.amount }}</td>
+                    <td ondblclick="makeEditable(this, '{{ transaction._id }}', 'category')">{{ transaction.category }}</td>
+                    <td ondblclick="makeEditable(this, '{{ transaction._id }}', 'confidence')">{{ (transaction.confidence * 100)|round(2) }}%</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- JavaScript to Handle Filter Submission -->
+<script>
+    const categories = [
+        "Income", "Groceries", "Rent/Mortgage", "Utilities", "Transport", 
+        "Savings", "Transfers", "Investments", "Debt Repayment", "Insurance", 
+        "Healthcare", "Education", "Entertainment", "Dining Out", 
+        "Charity/Donations", "Personal Development", "Travel", "Clothing", 
+        "Family", "Shopping", "Other"
+    ];
+
+    function applyFilters() {
+        const selectedAccounts = Array.from(document.querySelectorAll('#accountFilterForm input[name="accounts"]:checked'))
+            .map(checkbox => checkbox.value);
+        
+        fetch('/filter_transactions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ accounts: selectedAccounts })
+        })
+        .then(response => response.json())
+        .then(data => {
+            const transactionTable = document.getElementById('transactionTable');
+            transactionTable.innerHTML = ''; // Clear the table
+
+            data.transactions.forEach(transaction => {
+                const row = document.createElement('tr');
+                
+                row.innerHTML = `
+                    <td ondblclick="makeEditable(this, '${transaction._id}', 'date')">${transaction.date || ''}</td>
+                    <td ondblclick="makeEditable(this, '${transaction._id}', 'description')">${transaction.description || ''}</td>
+                    <td ondblclick="makeEditable(this, '${transaction._id}', 'amount')">${transaction.amount || ''}</td>
+                    <td ondblclick="makeEditable(this, '${transaction._id}', 'category')">${transaction.category || ''}</td>
+                    <td ondblclick="makeEditable(this, '${transaction._id}', 'confidence')">${(transaction.confidence * 100).toFixed(2) || '0.00'}%</td>
+                `;
+                
+                transactionTable.appendChild(row);
+            });
+
+            document.querySelector('.font-weight-bold').textContent = `Total Records: ${data.transactions.length}`;
+        })
+        .catch(error => console.error('Error fetching filtered transactions:', error));
+    }
+
+    function makeEditable(cell, transactionId, field) {
+        const originalValue = cell.innerText;
+
+        if (field === 'category') {
+            // If editing the Category field, show a styled dropdown
+            const select = document.createElement('select');
+            select.classList.add('form-select', 'form-select-sm'); // Add Bootstrap classes for styling
+            select.style.width = '100%'; // Make the dropdown take the full width of the cell
+
+            // Populate dropdown with categories
+            categories.forEach(category => {
+                const option = document.createElement('option');
+                option.value = category;
+                option.textContent = category;
+                if (category === originalValue) option.selected = true;
+                select.appendChild(option);
+            });
+
+            cell.innerHTML = ''; // Clear cell content
+            cell.appendChild(select);
+            select.focus();
+
+            // Save edit on blur or change
+            select.addEventListener('blur', () => saveEdit(cell, transactionId, field, originalValue, select.value));
+            select.addEventListener('change', () => saveEdit(cell, transactionId, field, originalValue, select.value));
+        } else {
+            // For other fields, make the cell content editable directly
+            cell.contentEditable = true;
+            cell.focus();
+
+            cell.addEventListener('blur', () => saveEdit(cell, transactionId, field, originalValue, cell.innerText.trim()));
+            cell.addEventListener('keydown', (event) => {
+                if (event.key === 'Enter') {
+                    event.preventDefault(); // Prevent newline in cell
+                    saveEdit(cell, transactionId, field, originalValue, cell.innerText.trim());
+                } else if (event.key === 'Escape') {
+                    cell.innerText = originalValue; // Cancel edit
+                    cell.contentEditable = false;
+                }
+            });
+        }
+    }
+
+
+    // Function to save the edited value to the database
+    function saveEdit(cell, transactionId, field, originalValue, newValue) {
+        if (newValue === originalValue) {
+            cell.innerHTML = originalValue;
+            return;  // No change, so skip update
+        }
+
+        fetch(`/update_transaction/${transactionId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ field: field, value: newValue })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                cell.innerHTML = newValue;
+                cell.contentEditable = false;
+            } else {
+                alert('Failed to update. Try again.');
+                cell.innerHTML = originalValue;
+            }
+        })
+        .catch(error => {
+            console.error('Error updating transaction:', error);
+            cell.innerHTML = originalValue;
+        });
+    }
+</script>
+{% endblock %}
